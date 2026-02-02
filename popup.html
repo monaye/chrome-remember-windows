@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <h1>Remember Windows</h1>
+    <div class="buttons">
+      <button id="saveBtn">Save All Windows</button>
+      <button id="restoreBtn">Restore Windows</button>
+    </div>
+    <div class="textarea-wrapper">
+      <textarea id="data" placeholder="JSON will appear here after save. Paste JSON here to restore."></textarea>
+      <button id="copyBtn" class="hidden">Copy</button>
+    </div>
+    <div id="status"></div>
+    <div class="footer">
+      <a href="https://buymeacoffee.com/monaye" target="_blank">Buy me a beer</a>
+    </div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>
