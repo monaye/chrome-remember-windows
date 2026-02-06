@@ -7,41 +7,36 @@ async function saveWindows() {
   const textarea = document.getElementById('data');
 
   try {
-    // Get current window to check if we're in incognito mode
     const currentWindow = await chrome.windows.getCurrent();
     const isIncognito = currentWindow.incognito;
 
     const allWindows = await chrome.windows.getAll({ populate: true });
-
-    // Filter windows based on current mode (incognito or regular)
     const filteredWindows = allWindows.filter(win => win.incognito === isIncognito);
 
-    const data = {
-      savedAt: new Date().toISOString(),
-      incognito: isIncognito,
-      windows: filteredWindows.map(win => ({
-        state: win.state,
-        left: win.left,
-        top: win.top,
-        width: win.width,
-        height: win.height,
-        focused: win.focused,
-        tabs: win.tabs
-          .filter(tab => !tab.url.startsWith('chrome://') && !tab.url.startsWith('chrome-extension://'))
-          .map(tab => ({
-            url: tab.url,
-            pinned: tab.pinned,
-            active: tab.active
-          }))
-      })).filter(win => win.tabs.length > 0)
-    };
+    const lines = [];
+    let windowCount = 0;
+    let tabCount = 0;
+
+    for (const win of filteredWindows) {
+      const tabs = win.tabs
+        .filter(tab => !tab.url.startsWith('chrome://') && !tab.url.startsWith('chrome-extension://'));
+      if (tabs.length === 0) continue;
+
+      if (windowCount > 0) lines.push('');
+      windowCount++;
+
+      lines.push(`/* Window ${windowCount} |left:${win.left}|top:${win.top}|width:${win.width}|height:${win.height}|state:${win.state}| */`);
+      for (const tab of tabs) {
+        lines.push(tab.pinned ? `${tab.url} [pinned]` : tab.url);
+        tabCount++;
+      }
+    }
 
     const modeLabel = isIncognito ? 'private' : 'regular';
-    textarea.value = JSON.stringify(data, null, 2);
-    status.textContent = `Saved ${data.windows.length} ${modeLabel} window(s) with ${data.windows.reduce((sum, w) => sum + w.tabs.length, 0)} tab(s)`;
+    textarea.value = lines.join('\n');
+    status.textContent = `Saved ${windowCount} ${modeLabel} window(s) with ${tabCount} tab(s)`;
     status.className = 'success';
 
-    // Show copy button
     document.getElementById('copyBtn').classList.remove('hidden');
   } catch (err) {
     status.textContent = 'Error: ' + err.message;
@@ -54,64 +49,103 @@ async function restoreWindows() {
   const textarea = document.getElementById('data');
 
   try {
-    const data = JSON.parse(textarea.value);
+    const text = textarea.value.trim();
+    if (!text) throw new Error('No data to restore');
 
-    if (!data.windows || !Array.isArray(data.windows)) {
-      throw new Error('Invalid format: missing windows array');
-    }
-
-    // Get current window to check if we're in incognito mode
     const currentWindow = await chrome.windows.getCurrent();
     const isIncognito = currentWindow.incognito;
+
+    // Parse text into window groups
+    const windows = []; // { props: {…} | null, urls: [{ url, pinned }] }
+    let currentWin = null;
+
+    for (const line of text.split('\n')) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+
+      if (/^\/\*.*\*\/$/.test(trimmed)) {
+        // Window marker — parse key:value pairs between pipes
+        const props = {};
+        for (const m of trimmed.matchAll(/(\w+):([^|*]+)/g)) {
+          props[m[1]] = m[2].trim();
+        }
+        currentWin = { props, urls: [] };
+        windows.push(currentWin);
+      } else {
+        // URL line — strip [pinned] suffix if present
+        const pinned = /\s*\[pinned\]\s*$/.test(trimmed);
+        const url = trimmed.replace(/\s*\[pinned\]\s*$/, '');
+
+        if (!currentWin) {
+          currentWin = { props: null, urls: [] };
+          windows.push(currentWin);
+        }
+        currentWin.urls.push({ url, pinned });
+      }
+    }
 
     let windowCount = 0;
     let tabCount = 0;
 
-    for (const win of data.windows) {
-      if (!win.tabs || win.tabs.length === 0) continue;
+    for (const win of windows) {
+      if (win.urls.length === 0) continue;
 
-      // Create window with first tab
-      // Note: state (maximized/minimized/fullscreen) cannot be combined with
-      // position/size, so create with position/size first, then update state
-      const needsStateChange = win.state && win.state !== 'normal';
-      const createData = {
-        url: win.tabs[0].url,
-        left: win.left,
-        top: win.top,
-        width: win.width,
-        height: win.height,
-        focused: true,
-        incognito: isIncognito
-      };
+      if (win.props === null) {
+        // Bare URLs — open in current window
+        for (const tab of win.urls) {
+          await chrome.tabs.create({
+            windowId: currentWindow.id,
+            url: tab.url,
+            pinned: tab.pinned
+          });
+          tabCount++;
+        }
+      } else {
+        // Window with properties — create a new window
+        const left = parseInt(win.props.left);
+        const top = parseInt(win.props.top);
+        const width = parseInt(win.props.width);
+        const height = parseInt(win.props.height);
+        const state = win.props.state || 'normal';
+        const needsStateChange = state !== 'normal';
 
-      const newWindow = await chrome.windows.create(createData);
+        const createData = {
+          url: win.urls[0].url,
+          focused: true,
+          incognito: isIncognito
+        };
+        if (!isNaN(left)) createData.left = left;
+        if (!isNaN(top)) createData.top = top;
+        if (!isNaN(width)) createData.width = width;
+        if (!isNaN(height)) createData.height = height;
 
-      if (needsStateChange) {
-        await chrome.windows.update(newWindow.id, { state: win.state });
-      }
-      windowCount++;
-      tabCount++;
+        const newWindow = await chrome.windows.create(createData);
 
-      // Handle pinned state for first tab
-      if (win.tabs[0].pinned) {
-        await chrome.tabs.update(newWindow.tabs[0].id, { pinned: true });
-      }
-
-      // Create remaining tabs
-      for (let i = 1; i < win.tabs.length; i++) {
-        const tab = win.tabs[i];
-        await chrome.tabs.create({
-          windowId: newWindow.id,
-          url: tab.url,
-          pinned: tab.pinned,
-          active: tab.active
-        });
+        if (needsStateChange) {
+          await chrome.windows.update(newWindow.id, { state });
+        }
+        windowCount++;
         tabCount++;
+
+        if (win.urls[0].pinned) {
+          await chrome.tabs.update(newWindow.tabs[0].id, { pinned: true });
+        }
+
+        for (let i = 1; i < win.urls.length; i++) {
+          await chrome.tabs.create({
+            windowId: newWindow.id,
+            url: win.urls[i].url,
+            pinned: win.urls[i].pinned
+          });
+          tabCount++;
+        }
       }
     }
 
     const modeLabel = isIncognito ? 'private' : 'regular';
-    status.textContent = `Restored ${windowCount} ${modeLabel} window(s) with ${tabCount} tab(s)`;
+    const parts = [];
+    if (windowCount > 0) parts.push(`${windowCount} ${modeLabel} window(s)`);
+    status.textContent = `Restored ${parts.length ? parts.join(' and ') + ' with ' : ''}${tabCount} tab(s)`;
     status.className = 'success';
   } catch (err) {
     status.textContent = 'Error: ' + err.message;
