@@ -71,6 +71,9 @@ async function restoreWindows() {
       if (!win.tabs || win.tabs.length === 0) continue;
 
       // Create window with first tab
+      // Note: state (maximized/minimized/fullscreen) cannot be combined with
+      // position/size, so create with position/size first, then update state
+      const needsStateChange = win.state && win.state !== 'normal';
       const createData = {
         url: win.tabs[0].url,
         left: win.left,
@@ -81,12 +84,11 @@ async function restoreWindows() {
         incognito: isIncognito
       };
 
-      // Only set state if not 'normal' (normal is default)
-      if (win.state && win.state !== 'normal') {
-        createData.state = win.state;
-      }
-
       const newWindow = await chrome.windows.create(createData);
+
+      if (needsStateChange) {
+        await chrome.windows.update(newWindow.id, { state: win.state });
+      }
       windowCount++;
       tabCount++;
 
