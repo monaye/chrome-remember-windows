@@ -80,7 +80,7 @@ async function restoreWindows() {
         top: win.top,
         width: win.width,
         height: win.height,
-        focused: false,
+        focused: true,
         incognito: isIncognito
       };
 
