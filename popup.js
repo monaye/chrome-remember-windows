@@ -2,6 +2,47 @@ document.getElementById('saveBtn').addEventListener('click', saveWindows);
 document.getElementById('restoreBtn').addEventListener('click', restoreWindows);
 document.getElementById('copyBtn').addEventListener('click', copyToClipboard);
 
+// Parse text into window groups: [{ props: {…} | null, urls: [{ url, pinned }] }]
+// Supports our export format (window markers + URLs) and plain text with URLs anywhere
+function parseText(text) {
+  const windows = [];
+  let currentWin = null;
+
+  for (const line of text.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+
+    if (/^\/\*.*\*\/$/.test(trimmed)) {
+      // Window marker — parse key:value pairs between pipes
+      const props = {};
+      for (const m of trimmed.matchAll(/(\w+):([^|*]+)/g)) {
+        props[m[1]] = m[2].trim();
+      }
+      currentWin = { props, urls: [] };
+      windows.push(currentWin);
+    } else {
+      // Extract all URLs from the line
+      const urlMatches = trimmed.match(/https?:\/\/[^\s"'<>]+/g);
+      if (!urlMatches) continue;
+
+      if (!currentWin) {
+        currentWin = { props: null, urls: [] };
+        windows.push(currentWin);
+      }
+
+      const linePinned = /\[pinned\]\s*$/.test(trimmed);
+
+      for (const url of urlMatches) {
+        // [pinned] applies to the last URL on the line
+        const pinned = linePinned && url === urlMatches[urlMatches.length - 1];
+        currentWin.urls.push({ url, pinned });
+      }
+    }
+  }
+
+  return windows;
+}
+
 async function saveWindows() {
   const status = document.getElementById('status');
   const textarea = document.getElementById('data');
@@ -55,34 +96,7 @@ async function restoreWindows() {
     const currentWindow = await chrome.windows.getCurrent();
     const isIncognito = currentWindow.incognito;
 
-    // Parse text into window groups
-    const windows = []; // { props: {…} | null, urls: [{ url, pinned }] }
-    let currentWin = null;
-
-    for (const line of text.split('\n')) {
-      const trimmed = line.trim();
-      if (!trimmed) continue;
-
-      if (/^\/\*.*\*\/$/.test(trimmed)) {
-        // Window marker — parse key:value pairs between pipes
-        const props = {};
-        for (const m of trimmed.matchAll(/(\w+):([^|*]+)/g)) {
-          props[m[1]] = m[2].trim();
-        }
-        currentWin = { props, urls: [] };
-        windows.push(currentWin);
-      } else {
-        // URL line — strip [pinned] suffix if present
-        const pinned = /\s*\[pinned\]\s*$/.test(trimmed);
-        const url = trimmed.replace(/\s*\[pinned\]\s*$/, '');
-
-        if (!currentWin) {
-          currentWin = { props: null, urls: [] };
-          windows.push(currentWin);
-        }
-        currentWin.urls.push({ url, pinned });
-      }
-    }
+    const windows = parseText(text);
 
     let windowCount = 0;
     let tabCount = 0;
@@ -91,12 +105,13 @@ async function restoreWindows() {
       if (win.urls.length === 0) continue;
 
       if (win.props === null) {
-        // Bare URLs — open in current window
+        // Bare URLs — open in current window (active:false keeps popup alive)
         for (const tab of win.urls) {
           await chrome.tabs.create({
             windowId: currentWindow.id,
             url: tab.url,
-            pinned: tab.pinned
+            pinned: tab.pinned,
+            active: false
           });
           tabCount++;
         }
@@ -169,3 +184,5 @@ async function copyToClipboard() {
     status.className = 'error';
   }
 }
+
+if (typeof module !== 'undefined') module.exports = { parseText };
