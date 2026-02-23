@@ -186,4 +186,38 @@ https://google.com`;
     const result = parseText(text);
     assert.equal(result[0].urls[0].url, 'https://www.microsoft.com/en-us/outlook?deeplink=%2Fmail%2F0%2F&sdf=0');
   });
+
+  it('handles active tab marker', () => {
+    const text = `https://google.com
+https://github.com [active]
+https://example.com`;
+
+    const result = parseText(text);
+    assert.equal(result[0].urls[0].active, false);
+    assert.equal(result[0].urls[1].active, true);
+    assert.equal(result[0].urls[1].url, 'https://github.com');
+    assert.equal(result[0].urls[2].active, false);
+  });
+
+  it('handles pinned and active on same tab', () => {
+    const text = `https://google.com [pinned] [active]
+https://github.com`;
+
+    const result = parseText(text);
+    assert.equal(result[0].urls[0].pinned, true);
+    assert.equal(result[0].urls[0].active, true);
+    assert.equal(result[0].urls[0].url, 'https://google.com');
+    assert.equal(result[0].urls[1].pinned, false);
+    assert.equal(result[0].urls[1].active, false);
+  });
+
+  it('handles active tab under window marker', () => {
+    const text = `/* Window 1 |left:0|top:0|width:800|height:600|state:normal| */
+https://google.com
+https://github.com [active]`;
+
+    const result = parseText(text);
+    assert.equal(result[0].urls[0].active, false);
+    assert.equal(result[0].urls[1].active, true);
+  });
 });

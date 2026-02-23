@@ -30,12 +30,13 @@ function parseText(text) {
         windows.push(currentWin);
       }
 
-      const linePinned = /\[pinned\]\s*$/.test(trimmed);
+      const linePinned = /\[pinned\]/.test(trimmed);
+      const lineActive = /\[active\]/.test(trimmed);
 
       for (const url of urlMatches) {
-        // [pinned] applies to the last URL on the line
-        const pinned = linePinned && url === urlMatches[urlMatches.length - 1];
-        currentWin.urls.push({ url, pinned });
+        // tags apply to the last URL on the line
+        const isLast = url === urlMatches[urlMatches.length - 1];
+        currentWin.urls.push({ url, pinned: linePinned && isLast, active: lineActive && isLast });
       }
     }
   }
@@ -68,7 +69,10 @@ async function saveWindows() {
 
       lines.push(`/* Window ${windowCount} |left:${win.left}|top:${win.top}|width:${win.width}|height:${win.height}|state:${win.state}| */`);
       for (const tab of tabs) {
-        lines.push(tab.pinned ? `${tab.url} [pinned]` : tab.url);
+        let line = tab.url;
+        if (tab.pinned) line += ' [pinned]';
+        if (tab.active) line += ' [active]';
+        lines.push(line);
         tabCount++;
       }
     }
@@ -146,13 +150,20 @@ async function restoreWindows() {
           await chrome.tabs.update(newWindow.tabs[0].id, { pinned: true });
         }
 
+        let activeTabId = win.urls[0].active ? newWindow.tabs[0].id : null;
+
         for (let i = 1; i < win.urls.length; i++) {
-          await chrome.tabs.create({
+          const created = await chrome.tabs.create({
             windowId: newWindow.id,
             url: win.urls[i].url,
             pinned: win.urls[i].pinned
           });
+          if (win.urls[i].active) activeTabId = created.id;
           tabCount++;
+        }
+
+        if (activeTabId) {
+          await chrome.tabs.update(activeTabId, { active: true });
         }
       }
     }
