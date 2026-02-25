@@ -21,8 +21,11 @@ function parseText(text) {
       currentWin = { props, urls: [] };
       windows.push(currentWin);
     } else {
-      // Extract all URLs from the line
-      const urlMatches = trimmed.match(/https?:\/\/[^\s"'<>]+/g);
+      // Extract URLs: try markdown links first, fall back to plain URLs
+      const mdLinks = [...trimmed.matchAll(/\[[^\]]*\]\((https?:\/\/[^)\s]+)\)/g)];
+      const urlMatches = mdLinks.length > 0
+        ? mdLinks.map(m => m[1])
+        : trimmed.match(/https?:\/\/[^\s"'<>]+/g);
       if (!urlMatches) continue;
 
       if (!currentWin) {
@@ -69,7 +72,8 @@ async function saveWindows() {
 
       lines.push(`/* Window ${windowCount} |left:${win.left}|top:${win.top}|width:${win.width}|height:${win.height}|state:${win.state}| */`);
       for (const tab of tabs) {
-        let line = tab.url;
+        const title = (tab.title || '').replace(/[\[\]]/g, '');
+        let line = `[${title}](${tab.url})`;
         if (tab.pinned) line += ' [pinned]';
         if (tab.active) line += ' [active]';
         lines.push(line);

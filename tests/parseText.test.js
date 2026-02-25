@@ -220,4 +220,59 @@ https://github.com [active]`;
     assert.equal(result[0].urls[0].active, false);
     assert.equal(result[0].urls[1].active, true);
   });
+
+  it('parses markdown-style links', () => {
+    const text = `[Google](https://google.com)
+[GitHub](https://github.com)`;
+
+    const result = parseText(text);
+    assert.equal(result.length, 1);
+    assert.equal(result[0].urls.length, 2);
+    assert.equal(result[0].urls[0].url, 'https://google.com');
+    assert.equal(result[0].urls[1].url, 'https://github.com');
+  });
+
+  it('parses markdown links with pinned and active tags', () => {
+    const text = `[Google](https://google.com) [pinned]
+[GitHub](https://github.com) [active]`;
+
+    const result = parseText(text);
+    assert.equal(result[0].urls[0].url, 'https://google.com');
+    assert.equal(result[0].urls[0].pinned, true);
+    assert.equal(result[0].urls[0].active, false);
+    assert.equal(result[0].urls[1].url, 'https://github.com');
+    assert.equal(result[0].urls[1].pinned, false);
+    assert.equal(result[0].urls[1].active, true);
+  });
+
+  it('parses markdown links under window markers', () => {
+    const text = `/* Window 1 |left:0|top:23|width:1200|height:800|state:normal| */
+[Google](https://google.com) [pinned]
+[My Project - GitHub](https://github.com/user/project) [active]
+[Stack Overflow](https://stackoverflow.com/questions)`;
+
+    const result = parseText(text);
+    assert.equal(result.length, 1);
+    assert.equal(result[0].props.left, '0');
+    assert.equal(result[0].urls.length, 3);
+    assert.equal(result[0].urls[0].url, 'https://google.com');
+    assert.equal(result[0].urls[0].pinned, true);
+    assert.equal(result[0].urls[1].url, 'https://github.com/user/project');
+    assert.equal(result[0].urls[1].active, true);
+    assert.equal(result[0].urls[2].url, 'https://stackoverflow.com/questions');
+  });
+
+  it('parses markdown links with query params', () => {
+    const text = `[Outlook](https://www.microsoft.com/en-us/outlook?deeplink=%2Fmail%2F0%2F&sdf=0)`;
+    const result = parseText(text);
+    assert.equal(result[0].urls[0].url, 'https://www.microsoft.com/en-us/outlook?deeplink=%2Fmail%2F0%2F&sdf=0');
+  });
+
+  it('handles markdown link with pinned and active on same tab', () => {
+    const text = `[Google](https://google.com) [pinned] [active]`;
+    const result = parseText(text);
+    assert.equal(result[0].urls[0].url, 'https://google.com');
+    assert.equal(result[0].urls[0].pinned, true);
+    assert.equal(result[0].urls[0].active, true);
+  });
 });
