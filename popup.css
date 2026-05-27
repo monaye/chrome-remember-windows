@@ -109,7 +109,9 @@ textarea:focus {
   margin-top: 16px;
   padding-top: 12px;
   border-top: 1px solid #eee;
-  text-align: center;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
 .footer a {
@@ -120,4 +122,19 @@ textarea:focus {
 
 .footer a:hover {
   color: #4285f4;
+}
+
+#closeAllBtn {
+  flex: none;
+  padding: 6px 12px;
+  font-size: 12px;
+  background-color: transparent;
+  color: #d93025;
+  border: 1px solid #d93025;
+}
+
+#closeAllBtn:hover,
+#closeAllBtn.armed {
+  background-color: #d93025;
+  color: white;
 }

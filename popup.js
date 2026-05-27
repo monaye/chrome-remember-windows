@@ -1,6 +1,7 @@
 document.getElementById('saveBtn').addEventListener('click', saveWindows);
 document.getElementById('restoreBtn').addEventListener('click', restoreWindows);
 document.getElementById('copyBtn').addEventListener('click', copyToClipboard);
+document.getElementById('closeAllBtn').addEventListener('click', closeAllWindows);
 
 // Strip trailing ')' that has no matching '(' — e.g. when a markdown link's
 // closing paren leaks into a plain-URL capture, or trailing punctuation in prose.
@@ -215,6 +216,40 @@ async function copyToClipboard() {
     }, 1500);
   } catch (err) {
     status.textContent = 'Failed to copy: ' + err.message;
+    status.className = 'error';
+  }
+}
+
+let closeAllArmed = false;
+let closeAllResetTimer = null;
+
+async function closeAllWindows() {
+  const status = document.getElementById('status');
+  const btn = document.getElementById('closeAllBtn');
+
+  try {
+    const currentWindow = await chrome.windows.getCurrent();
+    const isIncognito = currentWindow.incognito;
+    const allWindows = await chrome.windows.getAll();
+    const toClose = allWindows.filter(w => w.incognito === isIncognito);
+    const modeLabel = isIncognito ? 'private' : 'regular';
+
+    if (!closeAllArmed) {
+      closeAllArmed = true;
+      btn.textContent = `Click again to close ${toClose.length} ${modeLabel} window(s)`;
+      btn.classList.add('armed');
+      closeAllResetTimer = setTimeout(() => {
+        closeAllArmed = false;
+        btn.textContent = 'Close All Windows';
+        btn.classList.remove('armed');
+      }, 4000);
+      return;
+    }
+
+    clearTimeout(closeAllResetTimer);
+    await Promise.all(toClose.map(w => chrome.windows.remove(w.id)));
+  } catch (err) {
+    status.textContent = 'Error: ' + err.message;
     status.className = 'error';
   }
 }
