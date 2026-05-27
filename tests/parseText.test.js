@@ -275,4 +275,29 @@ https://github.com [active]`;
     assert.equal(result[0].urls[0].pinned, true);
     assert.equal(result[0].urls[0].active, true);
   });
+
+  it('does not append stray ) when title contains unescaped ]', () => {
+    // Falls back to plain-URL match; cleanUrl must strip the dangling ')'
+    const text = `[Foo] - Page Title](https://example.net/jize-432-rm)`;
+    const result = parseText(text);
+    assert.equal(result[0].urls[0].url, 'https://example.net/jize-432-rm');
+  });
+
+  it('does not append stray ) when whitespace separates ] and (', () => {
+    const text = `[Some Title] (https://example.net/jize-432-rm)`;
+    const result = parseText(text);
+    assert.equal(result[0].urls[0].url, 'https://example.net/jize-432-rm');
+  });
+
+  it('preserves balanced parens inside a URL (e.g. Wikipedia)', () => {
+    const text = `[Wikipedia](https://en.wikipedia.org/wiki/Page_(disambiguation))`;
+    const result = parseText(text);
+    assert.equal(result[0].urls[0].url, 'https://en.wikipedia.org/wiki/Page_(disambiguation)');
+  });
+
+  it('strips trailing ) from plain URLs with prose punctuation', () => {
+    const text = `see https://example.net/page) for details`;
+    const result = parseText(text);
+    assert.equal(result[0].urls[0].url, 'https://example.net/page');
+  });
 });

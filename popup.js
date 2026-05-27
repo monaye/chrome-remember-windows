@@ -2,11 +2,29 @@ document.getElementById('saveBtn').addEventListener('click', saveWindows);
 document.getElementById('restoreBtn').addEventListener('click', restoreWindows);
 document.getElementById('copyBtn').addEventListener('click', copyToClipboard);
 
+// Strip trailing ')' that has no matching '(' — e.g. when a markdown link's
+// closing paren leaks into a plain-URL capture, or trailing punctuation in prose.
+// Preserves legitimately balanced parens like Wikipedia's /Page_(disambiguation)
+function cleanUrl(url) {
+  while (url.endsWith(')')) {
+    const opens = (url.match(/\(/g) || []).length;
+    const closes = (url.match(/\)/g) || []).length;
+    if (closes <= opens) break;
+    url = url.slice(0, -1);
+  }
+  return url;
+}
+
 // Parse text into window groups: [{ props: {…} | null, urls: [{ url, pinned }] }]
 // Supports our export format (window markers + URLs) and plain text with URLs anywhere
 function parseText(text) {
   const windows = [];
   let currentWin = null;
+
+  // Markdown URL pattern allowing balanced parens inside the URL
+  const mdUrl = /https?:\/\/(?:[^()\s]+|\([^()]*\))+/;
+  // Title pattern — non-greedy so we don't swallow multiple links, but tolerant of ] in titles
+  const mdRe = new RegExp(`\\[.*?\\]\\((${mdUrl.source})\\)`, 'g');
 
   for (const line of text.split('\n')) {
     const trimmed = line.trim();
@@ -22,11 +40,12 @@ function parseText(text) {
       windows.push(currentWin);
     } else {
       // Extract URLs: try markdown links first, fall back to plain URLs
-      const mdLinks = [...trimmed.matchAll(/\[[^\]]*\]\((https?:\/\/[^)\s]+)\)/g)];
-      const urlMatches = mdLinks.length > 0
+      const mdLinks = [...trimmed.matchAll(mdRe)];
+      const rawUrls = mdLinks.length > 0
         ? mdLinks.map(m => m[1])
         : trimmed.match(/https?:\/\/[^\s"'<>]+/g);
-      if (!urlMatches) continue;
+      if (!rawUrls) continue;
+      const urlMatches = rawUrls.map(cleanUrl);
 
       if (!currentWin) {
         currentWin = { props: null, urls: [] };
